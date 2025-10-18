@@ -1,14 +1,16 @@
 # handlers/lowprice.py
-from loader import bot, RAPIDAPI_KEY
+import os
+from loader import bot
 from telebot import types
 import keyboards.calendar_custom as calendar_custom
 from utils.date_validator import parse_iso_date, check_range
 from api_hotels import search_hotels
-from database import HotelSearchHistory
+from database.models import HotelSearchHistory
 import threading
 import datetime
 import json
 
+RAPIDAPI_KEY = os.getenv('API_KEY')
 USER_STATE = {}
 STATE_LOCK = threading.Lock()
 # возможные step: await_city, await_checkin, await_checkout, await_price, showing_results

@@ -1,6 +1,6 @@
 from loader import bot
 from telebot import types
-from database import HotelSearchHistory
+from database.models import HotelSearchHistory
 
 @bot.message_handler(commands=['history'])
 def cmd_history(message):
