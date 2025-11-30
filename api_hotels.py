@@ -33,3 +33,4 @@ def search_hotels(city, checkin, checkout, price_min, price_max, limit=5):
     except Exception as e:
         print('API error in search_hotels:', e)
         return []
+
