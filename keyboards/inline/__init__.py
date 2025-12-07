@@ -12,6 +12,6 @@ def optional_params_kb():
         types.InlineKeyboardButton("Возраст детей", callback_data="param:children_age"),
         types.InlineKeyboardButton("Количество комнат", callback_data="param:room_qty"),
         types.InlineKeyboardButton("Диапазон цен", callback_data="param:price"),
-        types.InlineKeyboardButton("Показать отели", callback_data="param:show")
+        types.InlineKeyboardButton("Показать отели", callback_data="param:show"),
     )
     return kb

@@ -1,4 +1,5 @@
 from loader import bot
+from loguru import logger
 from telebot import types
 from api.request import get_dest_id, search_hotels
 import keyboards.inline as kb
@@ -18,12 +19,14 @@ def set_state(chat_id, **kwargs):
 def get_state(chat_id):
     return USER_STATE.get(chat_id, {})
 
-@bot.message_handler(commands=['search_hotels'])
+
+@bot.message_handler(commands=["search_hotels"])
 def start_search(message):
     chat_id = message.chat.id
-    set_state(chat_id, step='city')
+    set_state(chat_id, step="city")
     msg = bot.send_message(chat_id, "Введите город для поиска:")
     bot.register_next_step_handler(msg, process_city)
+
 
 def process_city(message):
     chat_id = message.chat.id
@@ -33,25 +36,29 @@ def process_city(message):
         bot.send_message(chat_id, "Не удалось найти город.")
         return
 
-    # Фильтруем только CITY
     city_options = [d for d in dests["data"] if d.get("dest_type") == "CITY"]
     if not city_options:
         city_options = dests["data"]
 
-    # Берём первый для упрощения
     dest_id = city_options[0]["dest_id"]
 
-    set_state(chat_id, dest_id=dest_id, city=city, step='arrival_date')
+    set_state(chat_id, dest_id=dest_id, city=city, step="arrival_date")
 
     today = datetime.date.today()
-    kb_calendar = calendar_custom.build_month_markup(today.year, today.month, role='checkin', min_date=today)
-    print(today)
-    bot.send_message(chat_id, f"Выбран город: {city}\nВыберите дату заезда:", reply_markup=kb_calendar)
-#
-# @bot.callback_query_handler(func=lambda call: call.data and call.data.startswith("cal_select:"))
-# def callback_calendar(call):
-#     print('qwerty')
-@bot.callback_query_handler(func=lambda call: call.data and call.data.startswith("cal_select:"))
+    kb_calendar = calendar_custom.build_month_markup(
+        today.year, today.month, role="checkin", min_date=today
+    )
+    logger.info(today)
+    bot.send_message(
+        chat_id,
+        f"Выбран город: {city}\nВыберите дату заезда:",
+        reply_markup=kb_calendar,
+    )
+
+
+@bot.callback_query_handler(
+    func=lambda call: call.data and call.data.startswith("cal_select:")
+)
 def callback_calendar(call):
     chat_id = call.message.chat.id
     parts = call.data.split(":")
@@ -60,9 +67,16 @@ def callback_calendar(call):
     if role == "checkin":
         set_state(chat_id, arrival_date=date_str)
         min_date = datetime.date.fromisoformat(date_str) + datetime.timedelta(days=1)
-        kb_checkout = calendar_custom.build_month_markup(min_date.year, min_date.month, role='checkout', min_date=min_date)
-        print('min date', min_date)
-        bot.edit_message_text(f"Дата заезда: {date_str}\nТеперь выберите дату выезда:", chat_id, call.message.message_id, reply_markup=kb_checkout)
+        kb_checkout = calendar_custom.build_month_markup(
+            min_date.year, min_date.month, role="checkout", min_date=min_date
+        )
+        logger.info("min date", min_date)
+        bot.edit_message_text(
+            f"Дата заезда: {date_str}\nТеперь выберите дату выезда:",
+            chat_id,
+            call.message.message_id,
+            reply_markup=kb_checkout,
+        )
     elif role == "checkout":
         st = get_state(chat_id)
         checkin = parse_iso_date(st.get("arrival_date"))
@@ -71,10 +85,18 @@ def callback_calendar(call):
         if not ok:
             bot.answer_callback_query(call.id, msg)
             return
-        set_state(chat_id, departure_date=date_str, step='optional')
-        bot.edit_message_text(f"Дата выезда: {date_str}\nТеперь выберите, что хотите уточнить:", chat_id, call.message.message_id, reply_markup=kb.optional_params_kb())
+        set_state(chat_id, departure_date=date_str, step="optional")
+        bot.edit_message_text(
+            f"Дата выезда: {date_str}\nТеперь выберите, что хотите уточнить:",
+            chat_id,
+            call.message.message_id,
+            reply_markup=kb.optional_params_kb(),
+        )
 
-@bot.callback_query_handler(func=lambda call: call.data and call.data.startswith("param:"))
+
+@bot.callback_query_handler(
+    func=lambda call: call.data and call.data.startswith("param:")
+)
 def callback_params(call):
     chat_id = call.message.chat.id
     param = call.data.split(":")[1]
@@ -84,13 +106,18 @@ def callback_params(call):
         msg = bot.send_message(chat_id, "Введите количество взрослых (например: 2):")
         bot.register_next_step_handler(msg, set_adults)
     elif param == "children_age":
-        msg = bot.send_message(chat_id, "Введите возраст детей через запятую (например: 5,12). Если нет — напишите 0:")
+        msg = bot.send_message(
+            chat_id,
+            "Введите возраст детей через запятую (например: 5,12). Если нет — напишите 0:",
+        )
         bot.register_next_step_handler(msg, set_children)
     elif param == "room_qty":
         msg = bot.send_message(chat_id, "Введите количество комнат (например: 1):")
         bot.register_next_step_handler(msg, set_rooms)
     elif param == "price":
-        msg = bot.send_message(chat_id, "Введите диапазон цен в рублях (например: 1000-5000):")
+        msg = bot.send_message(
+            chat_id, "Введите диапазон цен в рублях (например: 1000-5000):"
+        )
         bot.register_next_step_handler(msg, set_price)
     elif param == "show":
         show_hotels(call.message, st)
@@ -103,7 +130,11 @@ def set_adults(message):
     try:
         adults = int(message.text.strip())
         set_state(chat_id, adults=adults)
-        bot.send_message(chat_id, f"Количество взрослых установлено: {adults}", reply_markup=kb.optional_params_kb())
+        bot.send_message(
+            chat_id,
+            f"Количество взрослых установлено: {adults}",
+            reply_markup=kb.optional_params_kb(),
+        )
     except ValueError:
         bot.send_message(chat_id, "Введите целое число, пожалуйста.")
 
@@ -112,7 +143,9 @@ def set_children(message):
     chat_id = message.chat.id
     ages = message.text.strip()
     set_state(chat_id, children_age=ages)
-    bot.send_message(chat_id, f"Возраст(а) детей: {ages}", reply_markup=kb.optional_params_kb())
+    bot.send_message(
+        chat_id, f"Возраст(а) детей: {ages}", reply_markup=kb.optional_params_kb()
+    )
 
 
 def set_rooms(message):
@@ -120,7 +153,9 @@ def set_rooms(message):
     try:
         rooms = int(message.text.strip())
         set_state(chat_id, room_qty=rooms)
-        bot.send_message(chat_id, f"Количество комнат: {rooms}", reply_markup=kb.optional_params_kb())
+        bot.send_message(
+            chat_id, f"Количество комнат: {rooms}", reply_markup=kb.optional_params_kb()
+        )
     except ValueError:
         bot.send_message(chat_id, "Введите целое число, пожалуйста.")
 
@@ -132,19 +167,25 @@ def set_price(message):
         try:
             low, high = map(int, text.split("-"))
             set_state(chat_id, price_min=low, price_max=high)
-            bot.send_message(chat_id, f"Диапазон цен: от {low}₽ до {high}₽", reply_markup=kb.optional_params_kb())
+            bot.send_message(
+                chat_id,
+                f"Диапазон цен: от {low}₽ до {high}₽",
+                reply_markup=kb.optional_params_kb(),
+            )
         except ValueError:
             bot.send_message(chat_id, "Введите числа корректно, например: 1000-5000")
     else:
         bot.send_message(chat_id, "Формат должен быть 1000-5000")
 
 
-# Листание календаря назад / вперёд
-@bot.callback_query_handler(func=lambda call: call.data and (call.data.startswith("cal_prev:") or call.data.startswith("cal_next:")))
+@bot.callback_query_handler(
+    func=lambda call: call.data
+    and (call.data.startswith("cal_prev:") or call.data.startswith("cal_next:"))
+)
 def calendar_switch(call):
     parts = call.data.split(":")
-    print('parts', parts)
-    action = parts[0]       # cal_prev / cal_next
+    logger.info("parts", parts)
+    action = parts[0]
     role = parts[1]
     year = int(parts[2])
     month = int(parts[3])
@@ -159,21 +200,22 @@ def calendar_switch(call):
         if month > 12:
             month = 1
             year += 1
-    print('161',month)
+    logger.info("161", month)
 
     st = get_state(call.message.chat.id)
 
-    # Минимальная дата — для checkout это checkin + 1 день
     min_date = None
     if role == "checkout" and st.get("arrival_date"):
-        min_date = datetime.date.fromisoformat(st["arrival_date"]) + datetime.timedelta(days=1)
+        min_date = datetime.date.fromisoformat(st["arrival_date"]) + datetime.timedelta(
+            days=1
+        )
 
     markup = calendar_custom.build_month_markup(year, month, role, min_date)
 
     bot.edit_message_reply_markup(
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        reply_markup=markup
+        reply_markup=markup,
     )
 
 
@@ -190,42 +232,49 @@ def show_hotels(message, st):
         "children_age": st.get("children_age", "0"),
         "room_qty": st.get("room_qty", 1),
         "price_min": st.get("price_min", 0),
-        "price_max": st.get("price_max", 1000000)
+        "price_max": st.get("price_max", 1000000),
     }
 
     bot.send_message(message.chat.id, "🔎 Ищу подходящие отели...")
 
     try:
         result = search_hotels(params)
-        print(result)
+        logger.info(result)
     except Exception as e:
         bot.send_message(message.chat.id, f"Ошибка при запросе: {e}")
         return
 
-    # ✅ исправление: API возвращает список, а не словарь
     data = result.get("data", [])
     if not isinstance(data, list):
-        data = [data]  # оборачиваем в список, если вдруг dict
+        data = [data]
 
     if not data:
         bot.send_message(message.chat.id, "😞 API не вернул результатов.")
         return
 
-    # ✅ фильтруем реальные отели
-    hotels = [item for item in data if item.get("search_type") == "hotel" or item.get("dest_type") == "hotel"]
+    hotels = [
+        item
+        for item in data
+        if item.get("search_type") == "hotel" or item.get("dest_type") == "hotel"
+    ]
 
     if not hotels:
-        bot.send_message(message.chat.id, "😞 Не удалось найти отели для выбранного города.")
+        bot.send_message(
+            message.chat.id, "😞 Не удалось найти отели для выбранного города."
+        )
         return
 
-    # 🏨 выводим первые 5 отелей
     for hotel in hotels[:5]:
         name = hotel.get("name", "Без названия")
         region = hotel.get("region", "")
         country = hotel.get("country", "")
         image = hotel.get("image_url", "")
         dest_id = hotel.get("dest_id")
-        url = f"https://www.booking.com/hotel/{dest_id}.html" if dest_id else "https://www.booking.com"
+        url = (
+            f"https://www.booking.com/hotel/{dest_id}.html"
+            if dest_id
+            else "https://www.booking.com"
+        )
 
         caption = (
             f"🏨 <b>{name}</b>\n"
@@ -235,10 +284,11 @@ def show_hotels(message, st):
 
         if image:
             try:
-                bot.send_photo(message.chat.id, photo=image, caption=caption, parse_mode="HTML")
+                bot.send_photo(
+                    message.chat.id, photo=image, caption=caption, parse_mode="HTML"
+                )
             except Exception as e:
-                print(f"⚠ Ошибка при отправке фото: {e}")
+                logger.info(f"⚠ Ошибка при отправке фото: {e}")
                 bot.send_message(message.chat.id, caption, parse_mode="HTML")
         else:
             bot.send_message(message.chat.id, caption, parse_mode="HTML")
-
